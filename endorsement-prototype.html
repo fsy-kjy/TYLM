@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>承兑汇票背书转让 - 交互式产品原型</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f7fa;
+            overflow-x: hidden;
+        }
+
+        /* 左右分栏布局 */
+        .prototype-wrapper { display: flex; min-height: 100vh; }
+        .left-panel { width: 82%; padding: 16px; overflow-y: auto; max-height: 100vh; }
+        .right-panel {
+            width: 18%; background: #fffbeb; border-left: 2px solid #f59e0b;
+            padding: 20px 16px; overflow-y: auto; max-height: 100vh; position: relative;
+        }
+
+        /* SVG连线层 */
+        .svg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
+        .connection-line { fill: none; stroke: #f59e0b; stroke-width: 2; transition: stroke-width 0.2s, stroke 0.2s; }
+        .connection-line.active { stroke-width: 4; stroke: #d97706; }
+        .line-label { fill: #fff; font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+        .line-label-bg { fill: #f59e0b; }
+        .highlight-target { transition: box-shadow 0.2s, border-color 0.2s; border-radius: 4px; }
+        .highlight-target.active { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4); }
+
+        /* 右侧说明 */
+        .doc-item { margin-bottom: 20px; padding: 12px; background: #fff; border-radius: 8px; border-left: 4px solid #f59e0b; cursor: default; transition: box-shadow 0.2s; }
+        .doc-item:hover, .doc-item.active { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25); }
+        .doc-item .doc-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #f59e0b; color: #fff; border-radius: 50%; font-size: 12px; font-weight: 700; margin-right: 8px; }
+        .doc-item .doc-title { font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 4px; }
+        .doc-item .doc-desc { font-size: 12px; color: #78350f; line-height: 1.5; }
+
+        /* 系统框架 */
+        .system-frame { background: #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; }
+        .sys-header { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 48px; background: #c41e24; color: #fff; }
+        .sys-header-left { display: flex; align-items: center; gap: 12px; }
+        .sys-logo { font-size: 18px; font-weight: 700; }
+        .sys-nav { display: flex; gap: 4px; }
+        .sys-nav-item { padding: 4px 12px; font-size: 13px; border-radius: 4px; cursor: pointer; opacity: 0.85; }
+        .sys-nav-item:hover, .sys-nav-item.active { opacity: 1; background: rgba(255,255,255,0.15); }
+        .sys-header-right { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+
+        .main-body { display: flex; min-height: calc(100vh - 48px); }
+        .sidebar { width: 180px; background: #f8f9fa; border-right: 1px solid #e4e7ed; padding: 8px 0; }
+        .sidebar-group { margin-bottom: 4px; }
+        .sidebar-title { padding: 8px 16px; font-size: 12px; color: #909399; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .sidebar-item { padding: 9px 16px 9px 32px; font-size: 13px; color: #606266; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .sidebar-item:hover { background: #ecf5ff; color: #409eff; }
+        .sidebar-item.active { background: #ecf5ff; color: #409eff; border-right: 3px solid #409eff; }
+
+        .content-area { flex: 1; padding: 16px; background: #f5f7fa; }
+
+        /* Tab */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; }
+        .tab-item { padding: 6px 16px; font-size: 13px; border-radius: 4px 4px 0 0; background: #e4e7ed; color: #606266; cursor: pointer; border: 1px solid #dcdfe6; border-bottom: none; }
+        .tab-item.active { background: #409eff; color: #fff; border-color: #409eff; }
+
+        /* 统计卡片 */
+        .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .stat-card { background: #fff; border-radius: 4px; padding: 16px; border: 1px solid #e4e7ed; }
+        .stat-card .stat-label { font-size: 12px; color: #909399; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+        .stat-card .stat-value { font-size: 24px; font-weight: 700; color: #303133; }
+        .stat-card .stat-sub { font-size: 12px; color: #909399; margin-top: 4px; }
+
+        /* 筛选区 */
+        .filter-section { background: #fff; border-radius: 4px; padding: 16px; margin-bottom: 16px; border: 1px solid #e4e7ed; }
+        .filter-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-item { display: flex; align-items: center; gap: 6px; }
+        .filter-item label { font-size: 13px; color: #606266; white-space: nowrap; }
+        .filter-item input, .filter-item select { height: 30px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 8px; font-size: 13px; color: #606266; outline: none; min-width: 140px; }
+        .filter-item input:focus, .filter-item select:focus { border-color: #409eff; }
+        .btn-sm { height: 30px; padding: 0 16px; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-blue { background: #409eff; color: #fff; }
+        .btn-blue:hover { background: #66b1ff; }
+        .btn-white { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+        .btn-white:hover { border-color: #409eff; color: #409eff; }
+
+        /* 操作栏 */
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .toolbar-left { display: flex; gap: 8px; }
+        .toolbar-right { font-size: 13px; color: #909399; }
+
+        /* 表格 */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 4px; overflow: hidden; border: 1px solid #e4e7ed; }
+        .data-table th, .data-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #ebeef5; white-space: nowrap; }
+        .data-table th { background: #fafafa; color: #909399; font-weight: 500; font-size: 12px; }
+        .data-table td { color: #606266; }
+        .data-table tbody tr:hover { background: #f5f7fa; }
+        .data-table tbody tr.selected { background: #ecf5ff; }
+        .data-table .checkbox-cell { width: 40px; text-align: center; }
+        .data-table .checkbox-cell input { width: 16px; height: 16px; cursor: pointer; }
+        .data-table .seq-cell { width: 50px; text-align: center; color: #909399; }
+        .data-table .action-cell { display: flex; gap: 6px; }
+        .data-table .action-cell button { padding: 3px 10px; font-size: 12px; border: none; border-radius: 3px; cursor: pointer; }
+        .btn-pay { background: #409eff; color: #fff; }
+        .btn-pay:hover { background: #66b1ff; }
+        .btn-retry { background: #e6a23c; color: #fff; }
+        .btn-retry:hover { background: #ebb563; }
+        .btn-detail { background: #909399; color: #fff; }
+        .btn-detail:hover { background: #a6a9ad; }
+
+        /* 状态标签 */
+        .tag-pending { background: #f4f4f5; color: #909399; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .tag-processing { background: #ecf5ff; color: #409eff; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .tag-success { background: #f0f9eb; color: #67c23a; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .tag-failed { background: #fef0f0; color: #f56c6c; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+
+        /* 分页 */
+        .pagination-bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 0; margin-top: 8px; }
+        .pagination-bar select, .pagination-bar button { height: 28px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; font-size: 12px; padding: 0 8px; cursor: pointer; }
+        .pagination-bar button:disabled { color: #c0c4cc; cursor: not-allowed; }
+
+        /* 弹窗 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 100; }
+        .modal-overlay.show { display: flex; }
+        .modal-box { background: #fff; border-radius: 8px; width: 720px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .modal-box-lg { width: 900px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e4e7ed; }
+        .modal-header h3 { font-size: 16px; font-weight: 600; color: #303133; }
+        .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: #909399; }
+        .modal-close:hover { background: #f5f7fa; color: #606266; }
+        .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid #e4e7ed; }
+
+        /* 背书弹窗内票据列表 */
+        .modal-bill-item { display: flex; align-items: center; justify-content: between; padding: 10px 12px; background: #f5f7fa; border-radius: 4px; margin-bottom: 8px; }
+        .modal-bill-info { flex: 1; }
+        .modal-bill-no { font-size: 13px; font-weight: 500; color: #303133; }
+        .modal-bill-sub { font-size: 12px; color: #909399; margin-top: 2px; }
+        .modal-bill-amount { font-size: 15px; font-weight: 600; color: #409eff; }
+
+        /* Toast */
+        .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-20px); padding: 10px 24px; border-radius: 4px; font-size: 14px; color: #fff; z-index: 200; opacity: 0; transition: all 0.3s; pointer-events: none; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast-error { background: #f56c6c; }
+        .toast-success { background: #67c23a; }
+        .toast-info { background: #409eff; }
+
+        /* 钉钉通知 Toast */
+        .ding-toast { position: fixed; top: 16px; right: 16px; z-index: 250; animation: dingEnter 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes dingEnter { from { transform: translateX(100%) scale(0.9); opacity: 0; } to { transform: translateX(0) scale(1); opacity: 1; } }
+        .ding-toast-box { background: #fff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); border: 1px solid #e4e7ed; padding: 12px 16px; width: 320px; display: flex; gap: 10px; }
+        .ding-icon { width: 36px; height: 36px; background: #3370FF; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; flex-shrink: 0; }
+
+        /* 处理中动画 */
+        .spinner { width: 48px; height: 48px; border: 4px solid #e4e7ed; border-top-color: #409eff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 结果弹窗内容 */
+        .result-success-icon { width: 56px; height: 56px; background: #f0f9eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #67c23a; font-size: 24px; }
+        .result-fail-icon { width: 56px; height: 56px; background: #fef0f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #f56c6c; font-size: 24px; }
+        .result-info-box { background: #f5f7fa; border-radius: 4px; padding: 12px 16px; margin-top: 12px; }
+        .result-info-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+
+        /* 移动端 */
+        @media (max-width: 768px) {
+            .prototype-wrapper { flex-direction: column; }
+            .left-panel { width: 100%; max-height: none; }
+            .right-panel { width: 100%; border-left: none; border-top: 2px solid #f59e0b; max-height: none; }
+            .svg-overlay { display: none; }
+            .main-body { flex-direction: column; }
+            .sidebar { width: 100%; display: flex; overflow-x: auto; }
+            .sidebar-group { display: flex; }
+            .sidebar-title { display: none; }
+            .sidebar-item { padding: 8px 12px; white-space: nowrap; }
+            .filter-row { flex-direction: column; align-items: flex-start; }
+            .data-table { font-size: 12px; }
+            .data-table th, .data-table td { padding: 6px 4px; }
+            .modal-box { width: 98vw; }
+            .stat-cards { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <!-- SVG连线层 -->
+    <svg class="svg-overlay" id="svgOverlay"></svg>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <div class="prototype-wrapper">
+        <!-- 左侧：产品界面 -->
+        <div class="left-panel" id="leftPanel">
+            <div class="system-frame">
+                <!-- 系统头部 -->
+                <div class="sys-header">
+                    <div class="sys-header-left">
+                        <div class="sys-logo"><i class="fas fa-cube"></i> 华秋支付资产管理系统</div>
+                        <div class="sys-nav">
+                            <div class="sys-nav-item"><i class="fas fa-home"></i> 首页</div>
+                            <div class="sys-nav-item"><i class="fas fa-bolt"></i> 极速服务</div>
+                            <div class="sys-nav-item active"><i class="fas fa-money-bill-wave"></i> 付/退款管理</div>
+                        </div>
+                    </div>
+                    <div class="sys-header-right">
+                        <i class="fas fa-expand"></i>
+                        <span><i class="fas fa-user-circle"></i> 财务出纳 - 张丽</span>
+                    </div>
+                </div>
+
+                <div class="main-body">
+                    <!-- 左侧菜单 -->
+                    <div class="sidebar">
+                        <div class="sidebar-group">
+                            <div class="sidebar-title"><i class="fas fa-file-invoice"></i> 订单管理</div>
+                            <div class="sidebar-item">采购订单</div>
+                            <div class="sidebar-item">余额退款</div>
+                        </div>
+                        <div class="sidebar-group">
+                            <div class="sidebar-title"><i class="fas fa-money-check-alt"></i> 付/退款订单</div>
+                            <div class="sidebar-item">日志中心</div>
+                        </div>
+                        <div class="sidebar-group">
+                            <div class="sidebar-title"><i class="fas fa-cog"></i> 系统管理</div>
+                        </div>
+                        <div class="sidebar-group">
+                            <div class="sidebar-title"><i class="fas fa-bolt"></i> 极速服务</div>
+                            <div class="sidebar-item"><i class="fas fa-hand-holding-usd"></i> 付/退款管理</div>
+                            <div class="sidebar-item">发票审批</div>
+                            <div class="sidebar-item">公账流水</div>
+                            <div class="sidebar-item">异常凭证</div>
+                            <div class="sidebar-item active"><i class="fas fa-ticket-alt"></i> 银行承兑</div>
+                            <div class="sidebar-item">银行承兑明细金额</div>
+                        </div>
+                    </div>
+
+                    <!-- 内容区 -->
+                    <div class="content-area">
+                        <!-- Tab -->
+                        <div class="tab-bar" id="tabBar">
+                            <div class="tab-item"><i class="fas fa-list"></i> 付/退款管理</div>
+                            <div class="tab-item"><i class="fas fa-receipt"></i> 付/退款订单</div>
+                            <div class="tab-item"><i class="fas fa-history"></i> 操作日志</div>
+                            <div class="tab-item"><i class="fas fa-exchange-alt"></i> 公司转账</div>
+                            <div class="tab-item"><i class="fas fa-check-circle"></i> 认领日志</div>
+                            <div class="tab-item active" data-tab="endorse"><i class="fas fa-ticket-alt"></i> 承兑汇票背书转让</div>
+                        </div>
+
+                        <!-- 统计卡片 -->
+                        <div class="stat-cards">
+                            <div class="stat-card">
+                                <div class="stat-label"><span>待背书</span><i class="fas fa-clock text-gray-300"></i></div>
+                                <div class="stat-value" style="color:#909399;">12</div>
+                                <div class="stat-sub">金额合计 ¥3,250,000</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label"><span>背书申请中</span><i class="fas fa-spinner text-primary"></i></div>
+                                <div class="stat-value" style="color:#409eff;">3</div>
+                                <div class="stat-sub">金额合计 ¥850,000</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label"><span>背书成功</span><i class="fas fa-check text-success"></i></div>
+                                <div class="stat-value" style="color:#67c23a;">28</div>
+                                <div class="stat-sub">本月累计</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label"><span>背书失败</span><i class="fas fa-times text-danger"></i></div>
+                                <div class="stat-value" style="color:#f56c6c;">1</div>
+                                <div class="stat-sub">需人工处理</div>
+                            </div>
+                        </div>
+
+                        <!-- 筛选区 -->
+                        <div class="filter-section" id="filterSection">
+                            <div class="filter-row">
+                                <div class="filter-item">
+                                    <label>票据号码:</label>
+                                    <input type="text" placeholder="请输入票据号码" style="width:180px;">
+                                </div>
+                                <div class="filter-item">
+                                    <label>付款单号:</label>
+                                    <input type="text" placeholder="请输入付款单号" style="width:160px;">
+                                </div>
+                                <div class="filter-item">
+                                    <label>背书状态:</label>
+                                    <select id="statusFilter" onchange="renderTable()">
+                                        <option value="all">全部</option>
+                                        <option value="pending" selected>待背书</option>
+                                        <option value="processing">背书申请中</option>
+                                        <option value="success">背书成功</option>
+                                        <option value="failed">背书失败</option>
+                                    </select>
+                                </div>
+                                <div class="filter-item">
+                                    <label>承兑行:</label>
+                                    <select><option>全部</option><option>招商银行</option><option>工商银行</option><option>建设银行</option></select>
+                                </div>
+                                <div class="filter-item">
+                                    <label>被背书人:</label>
+                                    <input type="text" placeholder="请输入被背书人名称" style="width:160px;">
+                                </div>
+                            </div>
+                            <div class="filter-row">
+                                <div class="filter-item">
+                                    <label>到期日期:</label>
+                                    <input type="date" value="2026-06-01">
+                                    <span>-</span>
+                                    <input type="date" value="2026-12-31">
+                                </div>
+                                <div class="filter-item">
+                                    <label>票面金额:</label>
+                                    <input type="text" placeholder="最小金额" style="width:100px;">
+                                    <span>-</span>
+                                    <input type="text" placeholder="最大金额" style="width:100px;">
+                                </div>
+                                <div class="filter-item">
+                                    <label>创建时间:</label>
+                                    <input type="datetime-local" value="2025-06-01T00:00">
+                                    <span>~</span>
+                                    <input type="datetime-local" value="2025-06-01T23:59">
+                                </div>
+                                <button class="btn-sm btn-blue" onclick="doSearch()"><i class="fas fa-search"></i> 查询</button>
+                                <button class="btn-sm btn-white" onclick="doReset()"><i class="fas fa-redo"></i> 重置</button>
+                            </div>
+                        </div>
+
+                        <!-- 操作栏 -->
+                        <div class="toolbar" id="toolbarSection">
+                            <div class="toolbar-left">
+                                <button class="btn-sm btn-blue" id="btnBatchEndorse" onclick="openEndorseModal()" disabled><i class="fas fa-paper-plane"></i> 批量发起背书</button>
+                                <button class="btn-sm btn-white"><i class="fas fa-file-export"></i> 导出</button>
+                                <button class="btn-sm btn-white"><i class="fas fa-file-invoice"></i> 导出背书明细</button>
+                            </div>
+                            <div class="toolbar-right">显示列 <i class="fas fa-cog"></i></div>
+                        </div>
+
+                        <!-- 数据表格 -->
+                        <div style="overflow-x:auto;">
+                            <table class="data-table" id="dataTable">
+                                <thead>
+                                    <tr>
+                                        <th class="checkbox-cell"><input type="checkbox" id="checkAll" onchange="toggleCheckAll()"></th>
+                                        <th class="seq-cell">序号</th>
+                                        <th>票据号码</th>
+                                        <th>票面金额</th>
+                                        <th>承兑行</th>
+                                        <th>到期日</th>
+                                        <th>付款单号</th>
+                                        <th>被背书人</th>
+                                        <th>背书状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页 -->
+                        <div class="pagination-bar">
+                            <span style="font-size:12px;color:#909399;">共 <span id="totalCount">10</span> 条</span>
+                            <select><option>50 条/页</option><option>20 条/页</option><option>100 条/页</option></select>
+                            <button disabled>&lt;</button>
+                            <button style="background:#409eff;color:#fff;">1</button>
+                            <button disabled>&gt;</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：功能说明 -->
+        <div class="right-panel" id="rightPanel">
+            <div style="font-size:16px;font-weight:700;color:#92400e;margin-bottom:16px;">
+                <i class="fas fa-lightbulb"></i> 功能说明
+            </div>
+
+            <div class="doc-item" id="doc1" data-target="filterSection">
+                <div class="doc-title"><span class="doc-num">1</span>筛选查询区</div>
+                <div class="doc-desc">支持按票据号码、付款单号、背书状态、承兑行、被背书人、到期日期、票面金额等多维度筛选查询待背书票据。</div>
+            </div>
+
+            <div class="doc-item" id="doc2" data-target="toolbarSection">
+                <div class="doc-title"><span class="doc-num">2</span>批量发起背书</div>
+                <div class="doc-desc">勾选多个待背书票据后，点击「批量发起背书」按钮。系统自动从付款单带出被背书人信息，核对后一键提交至招商银行。</div>
+            </div>
+
+            <div class="doc-item" id="doc3" data-target="dataTable">
+                <div class="doc-title"><span class="doc-num">3</span>票据列表</div>
+                <div class="doc-desc">展示所有承兑汇票信息，支持勾选行级复选框。仅「待背书」状态可发起背书转让，背书成功后支持下载电子回单。</div>
+            </div>
+
+            <div class="doc-item" id="doc4" data-target="endorseModalBox">
+                <div class="doc-title"><span class="doc-num">4</span>背书转让弹窗</div>
+                <div class="doc-desc">弹窗内展示已选票据列表，被背书人信息从付款单自动带出。确认无误后点击「提交至招行」，系统自动处理并返回结果。</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 发起背书弹窗 -->
+    <div class="modal-overlay" id="endorseModal">
+        <div class="modal-box modal-box-lg" id="endorseModalBox">
+            <div class="modal-header">
+                <h3><i class="fas fa-paper-plane"></i> 发起背书转让</h3>
+                <div class="modal-close" onclick="closeEndorseModal()"><i class="fas fa-times"></i></div>
+            </div>
+            <div class="modal-body">
+                <div style="background:#ecf5ff;border-radius:4px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#409eff;display:flex;align-items:center;gap:8px;">
+                    <i class="fas fa-info-circle"></i>
+                    <span>以下被背书人信息已从付款单自动带出，请核对后提交。</span>
+                </div>
+
+                <div style="font-size:14px;font-weight:600;color:#303133;margin-bottom:10px;"><i class="fas fa-clipboard-list"></i> 已选票据（<span id="selectedCountInModal">0</span> 张）</div>
+                <div id="modalBillList" style="margin-bottom:16px;"></div>
+
+                <div style="border-top:1px solid #ebeef5;padding-top:16px;">
+                    <div style="font-size:14px;font-weight:600;color:#303133;margin-bottom:12px;"><i class="fas fa-user-check"></i> 被背书人信息（付款单带出）</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label style="font-size:12px;color:#606266;display:block;margin-bottom:4px;">被背书人名称</label>
+                            <input type="text" id="payeeName" value="深圳供应链有限公司" style="width:100%;height:32px;border:1px solid #dcdfe6;border-radius:4px;padding:0 10px;font-size:13px;color:#606266;outline:none;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#606266;display:block;margin-bottom:4px;">被背书人账号</label>
+                            <input type="text" id="payeeAccount" value="7559 1234 5678 9012" style="width:100%;height:32px;border:1px solid #dcdfe6;border-radius:4px;padding:0 10px;font-size:13px;color:#606266;outline:none;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#606266;display:block;margin-bottom:4px;">开户行</label>
+                            <input type="text" id="payeeBank" value="招商银行深圳南山支行" style="width:100%;height:32px;border:1px solid #dcdfe6;border-radius:4px;padding:0 10px;font-size:13px;color:#606266;outline:none;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#606266;display:block;margin-bottom:4px;">开户行行号</label>
+                            <input type="text" id="payeeBankCode" value="308584001234" style="width:100%;height:32px;border:1px solid #dcdfe6;border-radius:4px;padding:0 10px;font-size:13px;color:#606266;outline:none;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-sm btn-white" onclick="closeEndorseModal()">取消</button>
+                <button class="btn-sm btn-blue" onclick="submitEndorsement()"><i class="fas fa-paper-plane"></i> 提交至招行</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认弹窗 -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-box" style="width:460px;">
+            <div class="modal-body" style="text-align:center;padding:28px 24px;">
+                <div style="width:48px;height:48px;background:#fdf6ec;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:#e6a23c;font-size:20px;"><i class="fas fa-exclamation-triangle"></i></div>
+                <h3 style="font-size:16px;font-weight:600;color:#303133;margin-bottom:8px;">确认提交背书转让？</h3>
+                <p style="font-size:13px;color:#606266;margin-bottom:4px;">您即将向 <strong>深圳供应链有限公司</strong> 背书转让</p>
+                <p style="font-size:24px;font-weight:700;color:#409eff;margin:8px 0;" id="confirmAmount">¥0</p>
+                <p style="font-size:12px;color:#909399;">共 <span id="confirmCount">0</span> 张承兑汇票</p>
+            </div>
+            <div class="modal-footer" style="justify-content:center;">
+                <button class="btn-sm btn-white" onclick="closeModal('confirmModal'); openEndorseModal();">返回修改</button>
+                <button class="btn-sm btn-blue" onclick="processSubmission()">确认提交</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 处理中弹窗 -->
+    <div class="modal-overlay" id="processingModal">
+        <div class="modal-box" style="width:360px;">
+            <div class="modal-body" style="text-align:center;padding:32px 24px;">
+                <div class="spinner"></div>
+                <h3 style="font-size:16px;font-weight:600;color:#303133;margin-bottom:8px;">正在提交至招商银行...</h3>
+                <p style="font-size:13px;color:#909399;">请稍候，系统正在处理背书转让申请</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结果弹窗 -->
+    <div class="modal-overlay" id="resultModal">
+        <div class="modal-box" style="width:480px;">
+            <div class="modal-body" id="resultContent"></div>
+            <div class="modal-footer" style="justify-content:center;">
+                <button class="btn-sm btn-blue" onclick="closeModal('resultModal'); renderTable();">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 钉钉通知 -->
+    <div id="dingTalkToast" class="ding-toast" style="display:none;">
+        <div class="ding-toast-box">
+            <div class="ding-icon"><i class="fab fa-dingding"></i></div>
+            <div style="flex:1;min-width:0;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-size:13px;font-weight:600;color:#303133;">钉钉通知</span>
+                    <span style="font-size:11px;color:#909399;">刚刚</span>
+                </div>
+                <p style="font-size:12px;color:#606266;line-height:1.5;" id="dingTalkMsg">承兑汇票背书转让成功，请查收电子回单。</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===================== 数据 =====================
+        let bills = [
+            { id: '1', seq: 1, billNo: '1234567890123456', amount: 500000, acceptorBank: '招商银行北京分行', dueDate: '2026-09-15', status: 'pending', paymentNo: 'FK20260608001', payeeName: '深圳供应链有限公司', payeeAccount: '7559 1234 5678 9012', payeeBank: '招商银行深圳南山支行', bankSeqNo: '' },
+            { id: '2', seq: 2, billNo: '2345678901234567', amount: 300000, acceptorBank: '招商银行上海分行', dueDate: '2026-10-20', status: 'pending', paymentNo: 'FK20260608001', payeeName: '深圳供应链有限公司', payeeAccount: '7559 1234 5678 9012', payeeBank: '招商银行深圳南山支行', bankSeqNo: '' },
+            { id: '3', seq: 3, billNo: '3456789012345678', amount: 200000, acceptorBank: '招商银行深圳分行', dueDate: '2026-08-30', status: 'pending', paymentNo: 'FK20260608002', payeeName: '广州制造有限公司', payeeAccount: '6222 8888 9999 0000', payeeBank: '招商银行广州天河支行', bankSeqNo: '' },
+            { id: '4', seq: 4, billNo: '4567890123456789', amount: 450000, acceptorBank: '招商银行北京分行', dueDate: '2026-11-05', status: 'pending', paymentNo: 'FK20260608003', payeeName: '上海贸易集团', payeeAccount: '3100 1234 5678 9012', payeeBank: '招商银行上海浦东支行', bankSeqNo: '' },
+            { id: '5', seq: 5, billNo: '5678901234567890', amount: 150000, acceptorBank: '招商银行杭州分行', dueDate: '2026-07-18', status: 'processing', paymentNo: 'FK20260608004', payeeName: '杭州科技有限', payeeAccount: '5710 1234 5678 9012', payeeBank: '招商银行杭州西湖支行', bankSeqNo: 'CMB2026060800001' },
+            { id: '6', seq: 6, billNo: '6789012345678901', amount: 600000, acceptorBank: '招商银行北京分行', dueDate: '2026-12-25', status: 'success', paymentNo: 'FK20260608005', payeeName: '北京建设集团', payeeAccount: '1109 1234 5678 9012', payeeBank: '招商银行北京万柳支行', bankSeqNo: 'CMB2026060700008' },
+            { id: '7', seq: 7, billNo: '7890123456789012', amount: 250000, acceptorBank: '招商银行成都分行', dueDate: '2026-08-10', status: 'failed', paymentNo: 'FK20260608006', payeeName: '成都物流有限', payeeAccount: '5101 1234 5678 9012', payeeBank: '招商银行成都高新支行', bankSeqNo: '', failReason: '被背书人账号不存在，请核对后重新提交' },
+            { id: '8', seq: 8, billNo: '8901234567890123', amount: 350000, acceptorBank: '招商银行上海分行', dueDate: '2026-09-30', status: 'pending', paymentNo: 'FK20260608007', payeeName: '上海贸易集团', payeeAccount: '3100 1234 5678 9012', payeeBank: '招商银行上海浦东支行', bankSeqNo: '' },
+            { id: '9', seq: 9, billNo: '9012345678901234', amount: 180000, acceptorBank: '招商银行武汉分行', dueDate: '2026-10-15', status: 'pending', paymentNo: 'FK20260608008', payeeName: '武汉材料有限', payeeAccount: '4201 1234 5678 9012', payeeBank: '招商银行武汉光谷支行', bankSeqNo: '' },
+            { id: '10', seq: 10, billNo: '0123456789012345', amount: 420000, acceptorBank: '招商银行北京分行', dueDate: '2026-11-20', status: 'pending', paymentNo: 'FK20260608009', payeeName: '深圳供应链有限公司', payeeAccount: '7559 1234 5678 9012', payeeBank: '招商银行深圳南山支行', bankSeqNo: '' },
+        ];
+
+        let selectedRows = new Set();
+
+        // ===================== 状态标签 =====================
+        function getStatusTag(status) {
+            const map = { pending: ['tag-pending','待背书'], processing: ['tag-processing','背书申请中'], success: ['tag-success','背书成功'], failed: ['tag-failed','背书失败'] };
+            const s = map[status];
+            return `<span class="${s[0]}">${s[1]}</span>`;
+        }
+
+        function formatMoney(num) {
+            return '¥' + num.toLocaleString();
+        }
+
+        // ===================== 渲染表格 =====================
+        function renderTable() {
+            const filter = document.getElementById('statusFilter').value;
+            const tbody = document.getElementById('tableBody');
+
+            let filtered = bills.filter(b => filter === 'all' || b.status === filter);
+
+            tbody.innerHTML = filtered.map(b => `
+                <tr data-id="${b.id}" class="${selectedRows.has(b.id) ? 'selected' : ''}">
+                    <td class="checkbox-cell"><input type="checkbox" ${selectedRows.has(b.id) ? 'checked' : ''} onchange="toggleRow('${b.id}')" ${b.status !== 'pending' ? 'disabled' : ''}></td>
+                    <td class="seq-cell">${b.seq}</td>
+                    <td>${b.billNo}</td>
+                    <td style="text-align:right;font-weight:500;">${formatMoney(b.amount)}</td>
+                    <td>${b.acceptorBank}</td>
+                    <td>${b.dueDate}</td>
+                    <td>${b.paymentNo}</td>
+                    <td>${b.payeeName}</td>
+                    <td>${getStatusTag(b.status)}</td>
+                    <td class="action-cell">
+                        ${b.status === 'pending'
+                            ? `<button class="btn-pay" onclick="quickEndorse('${b.id}')"><i class="fas fa-paper-plane"></i> 发起背书</button>`
+                            : b.status === 'failed'
+                                ? `<button class="btn-retry" onclick="quickEndorse('${b.id}')"><i class="fas fa-redo"></i> 重新提交</button>`
+                                : b.status === 'success' && b.bankSeqNo
+                                    ? `<button class="btn-detail" onclick="downloadReceipt('${b.bankSeqNo}')"><i class="fas fa-download"></i> 回单</button>`
+                                    : `<span style="color:#c0c4cc;font-size:12px;">-</span>`
+                        }
+                    </td>
+                </tr>
+            `).join('');
+
+            updateBatchBtn();
+            updateCheckAllState();
+        }
+
+        // ===================== 行选择 =====================
+        function toggleRow(id) {
+            if (selectedRows.has(id)) selectedRows.delete(id);
+            else selectedRows.add(id);
+            renderTable();
+        }
+
+        function toggleCheckAll() {
+            const cb = document.getElementById('checkAll');
+            const pending = bills.filter(b => b.status === 'pending');
+            if (cb.checked) pending.forEach(b => selectedRows.add(b.id));
+            else pending.forEach(b => selectedRows.delete(b.id));
+            renderTable();
+        }
+
+        function updateCheckAllState() {
+            const cb = document.getElementById('checkAll');
+            const pending = bills.filter(b => b.status === 'pending');
+            cb.checked = pending.length > 0 && pending.every(b => selectedRows.has(b.id));
+            cb.indeterminate = pending.some(b => selectedRows.has(b.id)) && !pending.every(b => selectedRows.has(b.id));
+        }
+
+        function updateBatchBtn() {
+            const pendingSelected = Array.from(selectedRows).filter(id => {
+                const b = bills.find(x => x.id === id);
+                return b && b.status === 'pending';
+            });
+            const btn = document.getElementById('btnBatchEndorse');
+            btn.disabled = pendingSelected.length === 0;
+            btn.innerHTML = pendingSelected.length > 0
+                ? `<i class="fas fa-paper-plane"></i> 批量发起背书（${pendingSelected.length}）`
+                : `<i class="fas fa-paper-plane"></i> 批量发起背书`;
+        }
+
+        // ===================== 弹窗控制 =====================
+        function openModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        function openEndorseModal() {
+            const selected = Array.from(selectedRows).map(id => bills.find(b => b.id === id)).filter(Boolean);
+            if (selected.length === 0) return;
+
+            const container = document.getElementById('modalBillList');
+            document.getElementById('selectedCountInModal').textContent = selected.length;
+            container.innerHTML = selected.map(b => `
+                <div class="modal-bill-item">
+                    <div class="modal-bill-info">
+                        <div class="modal-bill-no">票号：${b.billNo}</div>
+                        <div class="modal-bill-sub">${b.acceptorBank} · 到期日 ${b.dueDate} · 付款单 ${b.paymentNo}</div>
+                    </div>
+                    <div class="modal-bill-amount">${formatMoney(b.amount)}</div>
+                </div>
+            `).join('');
+
+            openModal('endorseModal');
+        }
+
+        function closeEndorseModal() { closeModal('endorseModal'); }
+
+        function quickEndorse(id) {
+            selectedRows.clear();
+            selectedRows.add(id);
+            renderTable();
+            openEndorseModal();
+        }
+
+        function submitEndorsement() {
+            closeModal('endorseModal');
+            const selected = Array.from(selectedRows).map(id => bills.find(b => b.id === id)).filter(Boolean);
+            const total = selected.reduce((sum, b) => sum + b.amount, 0);
+            document.getElementById('confirmAmount').textContent = formatMoney(total);
+            document.getElementById('confirmCount').textContent = selected.length;
+            openModal('confirmModal');
+        }
+
+        function processSubmission() {
+            closeModal('confirmModal');
+            openModal('processingModal');
+
+            setTimeout(() => {
+                closeModal('processingModal');
+                const isSuccess = Math.random() > 0.2;
+                const selected = Array.from(selectedRows).map(id => bills.find(b => b.id === id)).filter(Boolean);
+                const total = selected.reduce((sum, b) => sum + b.amount, 0);
+
+                if (isSuccess) {
+                    selected.forEach(b => { b.status = 'success'; b.bankSeqNo = 'CMB' + Date.now().toString().slice(-12); });
+                    showSuccessResult(selected.length, total);
+                    showDingTalk(`承兑汇票背书转让成功，共 ${selected.length} 张，金额 ${formatMoney(total)}，电子回单已生成。`, true);
+                } else {
+                    const reason = '被背书人账号与户名不符，请核对后重新提交';
+                    selected.forEach(b => { b.status = 'failed'; b.failReason = reason; });
+                    showFailResult(selected.length, total, reason);
+                    showDingTalk(`承兑汇票背书转让失败，共 ${selected.length} 张，失败原因：${reason}，请登录系统处理。`, false);
+                }
+
+                selectedRows.clear();
+                renderTable();
+            }, 2000);
+        }
+
+        function showSuccessResult(count, amount) {
+            document.getElementById('resultContent').innerHTML = `
+                <div style="text-align:center;padding:12px 8px;">
+                    <div class="result-success-icon"><i class="fas fa-check"></i></div>
+                    <h3 style="font-size:16px;font-weight:600;color:#303133;margin-bottom:8px;">背书转让提交成功</h3>
+                    <p style="font-size:13px;color:#909399;margin-bottom:16px;">招商银行已受理，系统将自动轮询处理结果</p>
+                    <div class="result-info-box">
+                        <div class="result-info-row"><span style="color:#909399;">背书张数</span><span style="color:#303133;font-weight:500;">${count} 张</span></div>
+                        <div class="result-info-row"><span style="color:#909399;">背书金额</span><span style="color:#409eff;font-weight:600;">${formatMoney(amount)}</span></div>
+                        <div class="result-info-row"><span style="color:#909399;">银行流水号</span><span style="color:#303133;font-family:monospace;">CMB${Date.now().toString().slice(-12)}</span></div>
+                    </div>
+                    <div style="background:#f0f9eb;border-radius:4px;padding:10px 12px;margin-top:12px;display:flex;align-items:center;gap:8px;font-size:13px;color:#67c23a;">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>电子回单已自动下载，请至【回单管理】查看</span>
+                    </div>
+                </div>
+            `;
+            openModal('resultModal');
+        }
+
+        function showFailResult(count, amount, reason) {
+            document.getElementById('resultContent').innerHTML = `
+                <div style="text-align:center;padding:12px 8px;">
+                    <div class="result-fail-icon"><i class="fas fa-times"></i></div>
+                    <h3 style="font-size:16px;font-weight:600;color:#303133;margin-bottom:8px;">背书转让失败</h3>
+                    <p style="font-size:13px;color:#909399;margin-bottom:16px;">招商银行返回失败，请根据以下原因处理后重新提交</p>
+                    <div style="background:#fef0f0;border-radius:4px;padding:12px 16px;text-align:left;">
+                        <div style="font-size:13px;color:#f56c6c;font-weight:600;margin-bottom:4px;"><i class="fas fa-exclamation-circle"></i> 失败原因</div>
+                        <div style="font-size:13px;color:#606266;">${reason}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+                        <button class="btn-sm btn-white" onclick="closeModal('resultModal'); renderTable();">转人工处理</button>
+                        <button class="btn-sm btn-blue" onclick="closeModal('resultModal'); openEndorseModal();">重新编辑提交</button>
+                    </div>
+                </div>
+            `;
+            openModal('resultModal');
+        }
+
+        function showDingTalk(msg, isSuccess) {
+            const toast = document.getElementById('dingTalkToast');
+            document.getElementById('dingTalkMsg').textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 5000);
+        }
+
+        function downloadReceipt(seqNo) {
+            showToast(`电子回单 ${seqNo}.pdf 已开始下载`, 'success');
+        }
+
+        // ===================== 筛选 =====================
+        function doSearch() { showToast('查询中...', 'info'); }
+        function doReset() {
+            document.querySelectorAll('.filter-section input, .filter-section select').forEach(el => {
+                if (el.tagName === 'SELECT') el.selectedIndex = 0;
+                else if (el.type === 'text') el.value = '';
+            });
+            showToast('已重置筛选条件', 'info');
+        }
+
+        // ===================== Toast =====================
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast show toast-' + type;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ===================== 连线功能 =====================
+        function drawConnections() {
+            const svg = document.getElementById('svgOverlay');
+            svg.innerHTML = '';
+            const docs = document.querySelectorAll('.doc-item');
+            docs.forEach((doc, index) => {
+                const targetId = doc.getAttribute('data-target');
+                const target = document.getElementById(targetId);
+                if (!target) return;
+                const docRect = doc.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const startX = targetRect.right;
+                const startY = targetRect.top + targetRect.height / 2;
+                const endX = docRect.left;
+                const endY = docRect.top + docRect.height / 2;
+                const midX = startX + (endX - startX) / 2;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`);
+                path.setAttribute('class', 'connection-line');
+                path.setAttribute('data-index', index);
+                svg.appendChild(path);
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', startX + 18);
+                circle.setAttribute('cy', startY);
+                circle.setAttribute('r', 10);
+                circle.setAttribute('class', 'line-label-bg');
+                svg.appendChild(circle);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', startX + 18);
+                text.setAttribute('y', startY);
+                text.setAttribute('class', 'line-label');
+                text.textContent = index + 1;
+                svg.appendChild(text);
+            });
+        }
+
+        function setupHoverEffects() {
+            document.querySelectorAll('.doc-item').forEach((doc, index) => {
+                doc.addEventListener('mouseenter', () => {
+                    doc.classList.add('active');
+                    const line = document.querySelector(`.connection-line[data-index="${index}"]`);
+                    if (line) line.classList.add('active');
+                    const targetId = doc.getAttribute('data-target');
+                    const target = document.getElementById(targetId);
+                    if (target) target.classList.add('active');
+                });
+                doc.addEventListener('mouseleave', () => {
+                    doc.classList.remove('active');
+                    const line = document.querySelector(`.connection-line[data-index="${index}"]`);
+                    if (line) line.classList.remove('active');
+                    const targetId = doc.getAttribute('data-target');
+                    const target = document.getElementById(targetId);
+                    if (target) target.classList.remove('active');
+                });
+            });
+        }
+
+        // ===================== 初始化 =====================
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTable();
+            setTimeout(() => { drawConnections(); setupHoverEffects(); }, 300);
+        });
+        window.addEventListener('resize', () => { drawConnections(); });
+    </script>
+</body>
+</html>
